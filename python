@@ -1,0 +1,73 @@
+# Zadanie 11.01:
+# 1) Utworzenie tabeli w bazie::
+#CREATE TABLE pomiary (dzien DATE, godzina TIME, v1 DOUBLE, v2 DOUBLE);
+# 2) wczytać dane z csv1 do MySQL (dzien, godzina, 2 liczby)
+# 3) przenieść przetworzone pliki do folderu "przetworzone"
+
+import MySQLdb
+import os
+import numpy as np
+from datetime import datetime
+
+# folder w projekcie 
+foldery_wejsciowe = ["csv1"]  
+folder_przetworzone = "przetworzone"
+os.makedirs(folder_przetworzone, exist_ok=True)
+
+# połączenie MySQL 
+db_connection = MySQLdb.connect(
+    host="localhost",
+    port=3306,
+    user="root",
+    passwd="",
+    db="xxx"
+)
+curr = db_connection.cursor()
+
+# SQL
+SQL = "INSERT IGNORE INTO pomiary (dzien, godzina, v1, v2) VALUES (%s, %s, %s, %s)"
+
+try:
+    for folder in foldery_wejsciowe:
+        if not os.path.isdir(folder):
+            print("Brak folderu:", folder)
+            continue
+
+        for plik in os.listdir(folder):
+            if not plik.lower().endswith(".csv"):
+                continue
+
+            plik_sciezka = os.path.join(folder, plik)
+            print("Przetwarzam:", plik_sciezka)
+
+            dane_csv = np.loadtxt(plik_sciezka, delimiter=',')
+            dane_csv = np.atleast_2d(dane_csv)  # żeby 1 wiersz też działał
+
+            rows = []
+            for wiersz in dane_csv:
+                dzien_int = int(float(wiersz[0]))     
+                godzina_int = int(float(wiersz[1]))   
+
+                dzien = datetime.strptime(str(dzien_int), "%Y%m%d").date()
+                godzina = f"{godzina_int:02d}:00:00"  # 01:00:00
+
+                v1 = float(wiersz[2])
+                v2 = float(wiersz[3])
+
+                rows.append((dzien, godzina, v1, v2))
+
+            curr.executemany(SQL, rows)
+            db_connection.commit()
+
+            # przeniesienie do przetworzone
+            dst = os.path.join(folder_przetworzone, plik)
+            if not os.path.exists(dst):
+                os.rename(plik_sciezka, dst)
+            else:
+                os.remove(plik_sciezka)
+
+            print("przetworzono:", plik)
+
+finally:
+    curr.close()
+    db_connection.close()
